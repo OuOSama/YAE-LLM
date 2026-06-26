@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project YAE — YaeMLP Core Architecture</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --accent-purple: #bf5af2;
+            --accent-blue: #0a84ff;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --border-color: #30363d;
+            --success-green: #30a14e;
+            --gate-color: #ff9f0a;
+            --up-color: #64d2ff;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 950px;
+            margin: 0 auto;
+        }
+        header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+            margin-bottom: 2rem;
+        }
+        h1 { color: var(--accent-purple); margin-bottom: 0.5rem; }
+        h2 { color: var(--accent-blue); border-bottom: 1px solid var(--border-color); padding-bottom: 0.3rem; }
+        .badge {
+            background-color: var(--border-color);
+            color: var(--text-main);
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            margin-right: 0.3rem;
+        }
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+        
+        /* 🚨ระบบท่อสายพานจำลองพฤติกรรมเวกเตอร์ (SwiGLU Pipeline Visualizer) */
+        .pipeline-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #010409;
+            padding: 2rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            margin: 1.5rem 0;
+        }
+        .pipe-node {
+            background: #21262d;
+            padding: 0.5rem 1.5rem;
+            border-radius: 20px;
+            font-family: monospace;
+            font-weight: bold;
+            border: 1px solid var(--border-color);
+            text-align: center;
+            box-shadow: 0 0 10px rgba(10, 132, 255, 0.1);
+        }
+        .pipe-flow-split {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin: 1rem 0;
+            position: relative;
+        }
+        .pipe-branch {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+            padding: 0.8rem;
+            border-radius: 6px;
+            border: 1px dashed var(--border-color);
+            background: rgba(22, 27, 34, 0.5);
+        }
+        .pipe-branch.gate { border-color: var(--gate-color); }
+        .pipe-branch.up { border-color: var(--up-color); }
+        .branch-tag { font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.3rem; font-weight: bold;}
+        .gate .branch-tag { color: var(--gate-color); }
+        .up .branch-tag { color: var(--up-color); }
+
+        .pipe-vector {
+            display: flex;
+            gap: 3px;
+            margin-top: 0.5rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .vector-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            background: var(--accent-blue);
+        }
+        .gate .vector-dot { background: var(--gate-color); width: 10px; height: 10px;}
+        .up .vector-dot { background: var(--up-color); width: 10px; height: 10px;}
+        .merged .vector-dot { background: var(--accent-purple); width: 10px; height: 10px;}
+
+        .pipe-line {
+            width: 2px;
+            height: 20px;
+            background: var(--border-color);
+        }
+        .pipe-line.to-gate { background: linear-gradient(var(--border-color), var(--gate-color)); }
+        .pipe-line.to-up { background: linear-gradient(var(--border-color), var(--up-color)); }
+
+        code {
+            font-family: "SFMono-Regular", Consolas, monospace;
+            background-color: rgba(110, 118, 129, 0.4);
+            padding: 0.2rem 0.4rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        pre {
+            background-color: #010409;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            overflow-x: auto;
+        }
+        .highlight { color: #ff453a; font-weight: bold; }
+        .success { color: #32d74b; font-weight: bold; }
+        ul { padding-left: 1.2rem; }
+        li { margin-bottom: 0.5rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>YaeMLP Core Deep-Dive</h1>
+            <p>สถาปัตยกรรมแปรรูปฟีเจอร์ระดับสูงสไตล์ SwiGLU (อ้างอิงพิมพ์เขียว Qwen 3)</p>
+        </header>
+
+        <section class="card">
+            <h2>🧠 Engineering Question: เราจะ "ขยาย" และ "หดกลับ" ไปทำไม?</h2>
+            <p>ถ้ามองแค่คณิตศาสตร์ภายนอก การรับอินพุตมิติ 4 มิติเข้าไป แล้วพ่นออกมา 4 มิติเท่าเดิมดูเหมือนจะไม่มีอะไรเปลี่ยน... <strong>แต่ความจริงแล้ว กระบวนการแตกสายพานยืดหดนี้คือหัวใจสำคัญในการทำให้ AI "ฉลาดคิด" ค่ะซามะ!</strong></p>
+            
+            <div class="grid">
+                <div>
+                    <h3>💥 ทำไมต้อง "ขยาย" (Expand to 12 Dim)</h3>
+                    <ul>
+                        <li><strong class="highlight">เพิ่มพื้นที่สกัดมิติสมอง (Higher Capacity):</strong> การคำนวณในมิติต่ำๆ (เช่น 4 ช่อง) มันแคบเกินกว่าจะเชื่อมโยงตรรกะซับซ้อนได้ การเบ่งเวกเตอร์ออก 3 เท่า (เป็น 12 ช่อง) ทำให้เกิดการกระจายค่าน้ำหนักขนานกันไปในหลากหลายแง่มุม</li>
+                        <li><strong>สร้าง Non-linear Features:</strong> พอขยายพื้นที่แล้วจับผ่านฟังก์ชันคัดกรองอย่าง <code>SiLU</code> โมเดลจะสามารถเรียนรู้ความสัมพันธ์ของข้อมูลที่ซับซ้อนและไม่ได้เป็นเส้นตรงได้ลึกซึ้งยิ่งขึ้น</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3>📉 ทำไมต้อง "หดกลับ" (Shrink to 4 Dim)</h3>
+                    <ul>
+                        <li><strong class="success">รักษารูปทรงมาตรฐาน (Residual Connection):</strong> ในบล็อก Transformer ทุกอัน ขาออกจำเป็นต้องกลับไปคงรูปขนาดเดิมเสมอนั่นคือ <code>[Hidden_Size]</code> เพื่อเอาไปบวกคืนกับต้นฉบับและส่งต่อไม่ให้โครงสร้างตึกพังลงมาค่ะ</li>
+                        <li><strong>กลั่นกรองและตกผลึกข้อมูล:</strong> เสมือนหลังจากที่เราแยกสายพานไปทดเลขกระจายในกระดาษแผ่นใหญ่เสร็จ ชั้น <code>down_proj</code> จะคัดเลือกเนื้อๆ สาระสำคัญ บดอัดกลับลงมาในมิติเดิม</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>🗺️ SwiGLU Dimension Pipeline Visualization</h2>
+            <p>แผนภาพแสดงการไหลของข้อมูลจริงในฟังก์ชัน <code>forward(x)</code>: รับเข้าท่อเดียว แตกไลน์คำนวณมิติใหญ่ขนานกัน แล้วบีบกลับมาบรรจบก้อนสุดท้าย</p>
+            
+            <div class="pipeline-container">
+                <div class="pipe-node" style="color: var(--accent-blue);">📥 Input x [Hidden_Size = 4]</div>
+                <div class="pipe-vector">
+                    <div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div>
+                </div>
+                
+                <div style="display: flex; justify-content: space-around; width: 50%; margin-top: 5px;">
+                    <div class="pipe-line to-gate" style="transform: rotate(30deg); height: 30px;"></div>
+                    <div class="pipe-line to-up" style="transform: rotate(-30deg); height: 30px;"></div>
+                </div>
+
+                <div class="pipe-flow-split">
+                    <div class="pipe-branch gate">
+                        <div class="branch-tag">⚡ Gate Projection & SiLU</div>
+                        <div style="font-size: 0.85rem;">มิติขยาย: 12 ช่อง</div>
+                        <div class="pipe-vector">
+                            <div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div>
+                            <div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div>
+                            <div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div>
+                        </div>
+                    </div>
+
+                    <div class="pipe-branch up">
+                        <div class="branch-tag">🚀 Up Projection</div>
+                        <div style="font-size: 0.85rem;">มิติขยาย: 12 ช่อง</div>
+                        <div class="pipe-vector">
+                            <div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div>
+                            <div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div>
+                            <div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-around; width: 50%;">
+                    <div class="pipe-line" style="transform: rotate(-30deg); height: 30px; background: var(--gate-color);"></div>
+                    <div class="pipe-line" style="transform: rotate(30deg); height: 30px; background: var(--up-color);"></div>
+                </div>
+                <div class="pipe-line" style="background: linear-gradient(to bottom, #fff, var(--accent-purple)); height: 15px;"></div>
+
+                <div class="pipe-node merged" style="color: var(--accent-purple); border-color: var(--accent-purple); background: #241430;">
+                    💥 Expanded State (gate_out * up_out) [Intermediate_Size = 12]
+                </div>
+                <div class="pipe-vector merged">
+                    <div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div>
+                    <div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div>
+                    <div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div><div class="vector-dot"></div>
+                </div>
+
+                <div class="pipe-line" style="background: linear-gradient(var(--accent-purple), var(--success-green)); height: 30px;"></div>
+
+                <div class="pipe-node" style="color: var(--success-green); border-color: var(--success-green);">🚀 down_proj(x) Output [Hidden_Size = 4]</div>
+                <div class="pipe-vector">
+                    <div class="vector-dot" style="background: var(--success-green);"></div>
+                    <div class="vector-dot" style="background: var(--success-green);"></div>
+                    <div class="vector-dot" style="background: var(--success-green);"></div>
+                    <div class="vector-dot" style="background: var(--success-green);"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>📊 Live Tensor Trace (ผลลัพธ์ดิบ)</h2>
+            <p>บันทึกพฤติกรรมคำนวณจริงของตัวเลขบน Terminal</p>
+            
+            <h3>1. ขาเข้ามิตินิ่งสนิท (Input Vector)</h3>
+            <pre><code>[0.33669036626815796, 0.12880940735340118, 0.23446236550807953, 0.23033303022384644]</code></pre>
+
+            <h3>2. จังหวะแตกท่อระเบิดร่าง 12 มิติ (Expanded State)</h3>
+            <pre><code>[0.004, -0.0001, 0.0112, -0.001, -0.0109, 0.0018, -0.0069, -0.0002, 0.0011, -0.0005, -0.0065, 0.0009]</code></pre>
+
+            <h3>3. จังหวะตบรวมท่อกลับมาบรรจบเท่าเดิม (Final Output)</h3>
+            <pre><code>[-0.0016949346754699945, -0.006067184265702963, -0.003860996337607503, -0.0004003317444585264]</code></pre>
+        </section>
+
+        <footer style="text-align: center; color: var(--text-muted); font-size: 0.85rem; margin-top: 3rem;">
+            <p>คลังความรู้ประกอบโครงการลับ Project YAE © 2026 — พัฒนาด้วยใจรักในความคลีนโดยซามะ & ย่าเอ้ ค่ะ 💖</p>
+        </footer>
+    </div>
+</body>
+</html>
