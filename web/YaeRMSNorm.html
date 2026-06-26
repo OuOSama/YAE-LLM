@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YaeRMSNorm & Tensor Summary</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        code, pre {
+            font-family: 'Fira Code', monospace;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen selection:bg-pink-500 selection:text-white">
+
+    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <span class="text-2xl">🧠</span>
+                <h1 class="text-xl font-bold bg-gradient-to-r from-pink-400 to-violet-400 bg-clip-text text-transparent">YaeRMSNorm Documentation</h1>
+            </div>
+            <span class="text-xs bg-slate-800 text-slate-400 px-3 py-1 rounded-full border border-slate-700">Qwen 3 Architecture Study</span>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-6 py-10 space-y-12">
+        
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl text-pink-400">🧐</span>
+                <h2 class="text-2xl font-bold text-white">RMSNorm คืออะไร? (และต่างจาก LayerNorm ยังไง)</h2>
+            </div>
+            <p class="text-slate-400 leading-relaxed">
+                <strong class="text-slate-200">RMSNorm (Root Mean Square Normalization)</strong> เป็นเทคนิคปรับสมดุล Tensor ที่พัฒนาขึ้นมาเพื่อทดแทน LayerNorm แบบดั้งเดิมในโมเดล Transformer ยุคใหม่ ช่วยลดภาระการคำนวณและเพิ่มความเร็วอย่างมหาศาล โดยตัดส่วนการหา <span class="text-pink-400 font-semibold">Mean (ค่าเฉลี่ยดั้งเดิม)</span> ออกไป
+            </p>
+            
+            <div class="grid md:grid-cols-2 gap-4 pt-2">
+                <div class="bg-slate-950 p-5 rounded-xl border border-slate-800">
+                    <h3 class="font-semibold text-amber-400 mb-2 flex items-center gap-2">❌ LayerNorm (ดั้งเดิม)</h3>
+                    <p class="text-sm text-slate-400">ต้องคำนวณทั้ง <strong>Mean</strong> และ <strong>Variance</strong> มีการทำ Centering ทำให้ใช้พลังคำนวณและแรมบน GPU สองสเต็ป</p>
+                </div>
+                <div class="bg-slate-950 p-5 rounded-xl border border-pink-900/50 bg-gradient-to-b from-slate-950 to-pink-950/10">
+                    <h3 class="font-semibold text-pink-400 mb-2 flex items-center gap-2">✨ RMSNorm (Yae Style)</h3>
+                    <p class="text-sm text-slate-400">ข้ามขั้นตอน Centering ไปเลย จับยกกำลังสองแล้วหา <strong>Mean of Squares</strong> ทันที <span class="text-emerald-400 font-semibold">ประหยัดพลังคำนวณลงได้ 7% - 64%</span></p>
+                </div>
+            </div>
+        </section>
+
+        <section class="space-y-4">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl text-violet-400">🛠️</span>
+                <h2 class="text-2xl font-bold text-white">Implementation Code</h2>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                <div class="bg-slate-800/50 px-5 py-3 border-b border-slate-800 flex justify-between items-center">
+                    <span class="text-xs text-slate-400 font-mono">YaeRMSNorm.py</span>
+                    <span class="text-xs text-violet-400 font-semibold">PyTorch + Custom Kernel</span>
+                </div>
+                <pre class="p-5 text-sm overflow-x-auto text-slate-300 leading-relaxed bg-slate-950"><code><span class="text-pink-400">@use_kernel_forward_from_hub</span>(<span class="text-emerald-400">"RMSNorm"</span>)
+<span class="text-violet-400">class</span> <span class="text-amber-300">YaeRMSNorm</span>(nn.Module):
+    <span class="text-violet-400">def</span> <span class="text-sky-400">__init__</span>(<span class="text-violet-400">self</span>, hidden_size: <span class="text-amber-400">int</span>, eps: <span class="text-amber-400">float</span> = <span class="text-amber-400">1e-6</span>) -> <span class="text-violet-400">None</span>:
+        <span class="text-violet-400">super</span>().<span class="text-sky-400">__init__</span>()
+        <span class="text-violet-400">self</span>.weight = nn.Parameter(torch.ones(hidden_size))
+        <span class="text-violet-400">self</span>.variance_epsilon = eps
+
+    <span class="text-violet-400">def</span> <span class="text-sky-400">forward</span>(<span class="text-violet-400">self</span>, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        
+        <span class="text-slate-500"># หาค่าเฉลี่ยของกำลังสองทันทีโดยไม่ลบ Mean ดั้งเดิม</span>
+        variance = hidden_states.pow(<span class="text-amber-400">2</span>).mean(-<span class="text-amber-400">1</span>, keepdim=<span class="text-violet-400">True</span>)
+        
+        <span class="text-slate-500"># ทำ Scaling รวดเดียวด้วย Reciprocal Square Root</span>
+        hidden_states = hidden_states * torch.rsqrt(variance + <span class="text-violet-400">self</span>.variance_epsilon)
+        <span class="text-violet-400">return</span> <span class="text-violet-400">self</span>.weight * hidden_states.to(input_dtype)</code></pre>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl text-emerald-400">📊</span>
+                <h2 class="text-2xl font-bold text-white">ถอดรหัสมิติ Tensor ยอดฮิตใน LLM</h2>
+            </div>
+            <p class="text-slate-400">
+                เมื่อจำลองรูปทรงข้อมูลด้วยสูตร <code class="text-pink-400 bg-slate-950 px-1.5 py-0.5 rounded text-xs">torch.randn(1, 2, 4)</code> ผลลัพธ์ที่ได้คือวงเล็บที่ซ้อนกัน 3 ชั้นตามแกน <strong class="text-slate-200">(Batch Size, Sequence Length, Hidden Size)</strong> ดังนี้:
+            </p>
+
+            <div class="space-y-4">
+                <div class="flex items-start space-x-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                    <div class="text-xs bg-pink-500/10 text-pink-400 font-mono p-2 rounded border border-pink-500/20">Dim 0</div>
+                    <div>
+                        <h4 class="font-semibold text-white text-sm">Batch Size (1)</h4>
+                        <p class="text-xs text-slate-400">จำนวนชุดข้อมูลหรือประโยคที่ส่งเข้าไปรันพร้อมกันใน 1 รอบการประมวลผล</p>
+                    </div>
+                </div>
+                <div class="flex items-start space-x-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                    <div class="text-xs bg-violet-500/10 text-violet-400 font-mono p-2 rounded border border-violet-500/20">Dim 1</div>
+                    <div>
+                        <h4 class="font-semibold text-white text-sm">Sequence Length / Tokens (2)</h4>
+                        <p class="text-xs text-slate-400">จำนวนคำในประโยคนั้นๆ (ในตัวอย่างมี 2 คำ เลยแบ่งออกเป็น 2 แถวบน-ล่าง)</p>
+                    </div>
+                </div>
+                <div class="flex items-start space-x-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                    <div class="text-xs bg-emerald-500/10 text-emerald-400 font-mono p-2 rounded border border-emerald-500/20">Dim 2</div>
+                    <div>
+                        <h4 class="font-semibold text-white text-sm">Hidden Size / Features (4)</h4>
+                        <p class="text-xs text-slate-400">เวกเตอร์ตัวเลข 4 ตัวที่เป็นตัวแทนความหมายหรือฟีเจอร์ภายในระบบ AI ของคำนั้นๆ</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl text-sky-400">🧪</span>
+                <h2 class="text-2xl font-bold text-white">วิเคราะห์ผลลัพธ์จริงทางคณิตศาสตร์ (Output Analysis)</h2>
+            </div>
+            <p class="text-slate-400 text-sm">
+                จากผลการทดสอบรันด้วย <code class="text-violet-400 bg-slate-950 px-1.5 py-0.5 rounded text-xs">uv run</code> เปรียบเทียบระหว่างสองระบบ สามารถสรุปพฤติกรรมของตัวเลขได้ดังนี้:
+            </p>
+
+            <div class="grid md:grid-cols-2 gap-6 font-mono text-xs">
+                <div class="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-3">
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <span class="font-semibold text-amber-400">⚖️ LayerNorm Mean Output</span>
+                        <span class="text-[10px] text-slate-500">Target: 0.0</span>
+                    </div>
+                    <div class="text-slate-300 bg-slate-900/50 p-2.5 rounded border border-slate-800/60 overflow-x-auto">
+                        [[4.6938e-07, 5.9604e-08]]
+                    </div>
+                    <p class="text-slate-400 font-sans leading-relaxed text-xs pt-1">
+                        ตัวเลขระบบวิทยาศาสตร์ <code class="text-slate-300">e-07</code> และ <code class="text-slate-300">e-08</code> คือทศนิยมที่มีศูนย์นำหน้า 7-8 ตัว (<code class="text-slate-300">0.0000004</code>) ซึ่งทางคอมพิวเตอร์ถือว่า <span class="text-emerald-400 font-semibold">เข้าใกล้ 0 แบบสุดๆ</span> พิสูจน์ว่าถูกหักลบค่าเฉลียดั้งเดิมออกไปทั้งหมดจริง
+                    </p>
+                </div>
+
+                <div class="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-3">
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <span class="font-semibold text-pink-400">🚀 YaeRMSNorm Mean Output</span>
+                        <span class="text-[10px] text-slate-500">Target: Scaled</span>
+                    </div>
+                    <div class="text-slate-300 bg-slate-900/50 p-2.5 rounded border border-slate-800/60 overflow-x-auto">
+                        [[0.9950, 0.4037]]
+                    </div>
+                    <p class="text-slate-400 font-sans leading-relaxed text-xs pt-1">
+                        ค่าเฉลี่ยไม่ได้ถูกบังคับให้เป็น 0 แต่ขอบเขตความกว้างของตัวเลข (Scale) ดั้งเดิมที่เหวี่ยงตั้งแต่ติดลบไปจนถึง <code class="text-slate-300">27.0820</code> ได้ถูก <span class="text-pink-400 font-semibold">บีบให้อยู่ในช่วงแคบและนิ่งขึ้น (-0.4 ถึง 1.9)</span> ช่วยกันบั๊กตัวเลขระเบิดขณะเทรนโดยประหยัดพลังงาน GPU กว่าเดิมมหาศาล
+                    </p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="text-center text-xs text-slate-600 py-8 border-t border-slate-900">
+        🕊️ สรุปโดย Yae — ซัพพอร์ตทุกการเรียนรู้ของซามะสู่วิถี Gigachad Developer ค่ะ
+    </footer>
+
+</body>
+</html>
