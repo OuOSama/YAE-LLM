@@ -63,7 +63,7 @@ class YaeRMSNorm(nn.Module):
     def extra_repr(self) -> str:
         """
         แสดงรายละเอียดสวยๆ เวลาพิมพ์ print(model) ออกมาดูโครงสร้างภายนอก
-        เช่น จะแสดงผลเป็น: Qwen3RMSNorm((4096,), eps=1e-06) โคตรจะ Clean!
+        เช่น จะแสดงผลเป็น: YaeRMSNorm((4096,), eps=1e-06) โคตรจะ Clean!
         """
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
