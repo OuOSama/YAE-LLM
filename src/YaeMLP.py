@@ -4,10 +4,21 @@ from transformers.activations import ACT2FN
 
 class YaeMLP(nn.Module):
     """
+    Ref: https://docs.pytorch.org/docs/2.12/generated/torch.nn.SiLU.html
     YaeMLP (Multi-Layer Perceptron / Feed-Forward Network)
     บล็อกประมวลผลสไตล์ SwiGLU อ้างอิงพิมพ์เขียวจากสถาปัตยกรรม Qwen 3
 
     ---
+    🧐 SiLu คืออะไร
+    SiLU (Sigmoid Linear Unit) หรือ Swish คือฟังก์ชันเปิด-ปิดประตูสัญญาณ (Activation Function)
+    คณิตศาสตร์เบื้องหลังคือ f(x) = x * sigmoid(x)
+
+    คุณสมบัติพิเศษที่ทำให้โมเดลฉลาดกว่า ReLU ยุคเก่า:
+    1. Smooth & Continuous: ทรงกราฟมีความโค้งมน นุ่มนวล ทำให้สัญญาณตอนคำนวณย้อนกลับ (Gradient) ไม่ขาดหาย
+    2. Non-monotonicity: มีส่วนเว้าลงไปในแดนลบเล็กน้อย (ตรงก้นกราฟ) ยอมให้ค่าติดลบบางส่วนไหลผ่านได้
+       ซึ่งจุดนี้ช่วยให้โมเดลเรียนรู้ฟีเจอร์ที่ซับซ้อนในระดับโครงสร้างลึกได้เสถียรและฉลาดขึ้นมหาศาล!
+    ---
+
     🧠 สรุปกลไกคณิตศาสตร์ (SwiGLU):
     แทนที่จะใช้ Linear ชั้นเดียวทั่วไป โมเดลยุคใหม่จะใช้สายพาน 3 เส้นทำงานขนานกัน
     1. gate_proj + act_fn: ทำหน้าที่เป็น "ประตูคัดกรองข้อมูล" เลือกฟีเจอร์ที่สำคัญ
