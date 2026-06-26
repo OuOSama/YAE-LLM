@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>🧠 Tensors in Deep Learning · YAE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0e0e10;
+    --surface-1: #16161a;
+    --surface-2: #1e1e24;
+    --surface-3: #26262e;
+    --border:    rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.15);
+
+    --text-primary:   #f0f0f4;
+    --text-secondary: #a0a0b0;
+    --text-muted:     #606070;
+
+    --purple:    #a78bfa;
+    --purple-bg: rgba(167,139,250,0.10);
+    --purple-border: rgba(167,139,250,0.25);
+
+    --blue:      #60a5fa;
+    --blue-bg:   rgba(96,165,250,0.10);
+    --blue-border: rgba(96,165,250,0.25);
+
+    --green:     #34d399;
+    --green-bg:  rgba(52,211,153,0.10);
+    --green-border: rgba(52,211,153,0.25);
+
+    --amber:     #fbbf24;
+    --amber-bg:  rgba(251,191,36,0.10);
+
+    --radius-sm: 6px;
+    --radius:    10px;
+    --radius-lg: 14px;
+
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 2.5rem 1rem 4rem;
+    line-height: 1.6;
+  }
+
+  .container { max-width: 740px; margin: 0 auto; }
+
+  /* ─── Hero ─── */
+  .hero {
+    background: var(--surface-1);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 2rem 2.25rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 220px; height: 220px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(167,139,250,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: var(--purple-bg);
+    color: var(--purple);
+    border: 0.5px solid var(--purple-border);
+    margin-bottom: 1rem;
+  }
+  .hero-title {
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+  }
+  .hero-sub {
+    font-size: 15px;
+    color: var(--text-secondary);
+    margin-bottom: 1.25rem;
+    line-height: 1.7;
+  }
+  .callout {
+    background: var(--blue-bg);
+    border-left: 2.5px solid var(--blue);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 0.75rem 1rem;
+    font-size: 13.5px;
+    color: var(--blue);
+    line-height: 1.65;
+  }
+  .callout strong { color: #93c5fd; }
+
+  /* ─── Section label ─── */
+  .section-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 2rem 0 0.85rem;
+  }
+
+  /* ─── Rank Cards ─── */
+  .rank-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 10px;
+    margin-bottom: 1rem;
+  }
+  .rank-card {
+    background: var(--surface-2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+  }
+  .rank-card:hover { border-color: var(--border-strong); background: var(--surface-3); }
+  .rank-card.active {
+    border: 1.5px solid var(--purple-border);
+    background: var(--purple-bg);
+  }
+  .rank-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 20px;
+    border: 0.5px solid var(--border-strong);
+    color: var(--text-muted);
+    margin-bottom: 0.6rem;
+    font-family: var(--font-mono);
+  }
+  .rank-card.active .rank-badge {
+    background: var(--purple);
+    color: #1a1030;
+    border-color: transparent;
+  }
+  .rank-name { font-size: 15px; font-weight: 500; color: var(--text-primary); margin-bottom: 0.2rem; }
+  .rank-desc { font-size: 12.5px; color: var(--text-secondary); margin-bottom: 0.65rem; }
+  .rank-code {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--purple);
+    background: rgba(167,139,250,0.07);
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    display: block;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+
+  /* ─── Detail Box ─── */
+  .detail-box {
+    background: var(--surface-1);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.4rem;
+    margin-bottom: 1.5rem;
+    min-height: 90px;
+    transition: all 0.2s;
+  }
+  .detail-label { font-size: 11px; color: var(--text-muted); margin-bottom: 0.35rem; letter-spacing: 0.04em; }
+  .detail-shape {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--purple);
+    margin-bottom: 0.5rem;
+  }
+  .detail-body { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+
+  /* ─── B,T,C Section ─── */
+  .bct-card {
+    background: var(--surface-1);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 1.5rem;
+  }
+  .bct-vis {
+    display: flex;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 0.5px solid var(--border);
+    margin-bottom: 1.25rem;
+    font-family: var(--font-mono);
+  }
+  .bct-dim {
+    flex: 1;
+    padding: 1rem;
+    text-align: center;
+    border-right: 0.5px solid var(--border);
+  }
+  .bct-dim:last-child { border-right: none; }
+  .bct-dim-label { font-size: 10px; color: var(--text-muted); margin-bottom: 4px; font-family: var(--font-sans); letter-spacing: 0.04em; }
+  .bct-dim-val { font-size: 28px; font-weight: 600; }
+  .bct-dim-name { font-size: 11px; margin-top: 4px; font-family: var(--font-sans); font-weight: 500; }
+  .d-b { background: var(--purple-bg); }
+  .d-b .bct-dim-val, .d-b .bct-dim-name { color: var(--purple); }
+  .d-t { background: var(--blue-bg); }
+  .d-t .bct-dim-val, .d-t .bct-dim-name { color: var(--blue); }
+  .d-c { background: var(--green-bg); }
+  .d-c .bct-dim-val, .d-c .bct-dim-name { color: var(--green); }
+
+  .bct-rows { display: flex; flex-direction: column; gap: 10px; }
+  .bct-row { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; }
+  .bct-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+  .dot-b { background: var(--purple); }
+  .dot-t { background: var(--blue); }
+  .dot-c { background: var(--green); }
+  .bct-row-text { color: var(--text-secondary); line-height: 1.65; }
+  .bct-row-text strong { color: var(--text-primary); font-weight: 500; }
+
+  /* ─── Ops Grid ─── */
+  .ops-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: 1.5rem;
+  }
+  .op-card {
+    background: var(--surface-2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+  }
+  .op-name {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--green);
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+  .op-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.55; }
+
+  /* ─── Footer ─── */
+  .footer {
+    margin-top: 2.5rem;
+    padding-top: 1.25rem;
+    border-top: 0.5px solid var(--border);
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .footer-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--purple);
+    opacity: 0.5;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="hero">
+    <span class="tag">YAE · Deep Learning Fundamentals</span>
+    <h1 class="hero-title">🧠 Tensors in Deep Learning</h1>
+    <p class="hero-sub">โครงสร้างข้อมูลพื้นฐานที่ขับเคลื่อนโมเดลระดับโลก — Qwen, LLaMA, และทุกอย่างที่ซามะกำลังสร้างอยู่ค่ะ</p>
+    <div class="callout">
+      <strong>Tensor vs NumPy Array</strong> — Tensor ทำงานบน <strong>GPU</strong> สำหรับการคำนวณแบบขนานได้เร็วทะลุนรก และรองรับระบบ <strong>Autograd</strong> สำหรับ Backpropagation อัตโนมัติค่ะ
+    </div>
+  </div>
+
+  <p class="section-label">Rank / มิติของ Tensor — คลิกเพื่อดูรายละเอียด</p>
+
+  <div class="rank-grid" id="rankGrid">
+    <div class="rank-card" onclick="selectRank(0)">
+      <span class="rank-badge">0D</span>
+      <p class="rank-name">Scalar</p>
+      <p class="rank-desc">เลขโดดๆ ตัวเดียว ไม่มีมิติ</p>
+      <code class="rank-code">torch.tensor(5)</code>
+    </div>
+    <div class="rank-card" onclick="selectRank(1)">
+      <span class="rank-badge">1D</span>
+      <p class="rank-name">Vector</p>
+      <p class="rank-desc">เส้นตรงของตัวเลข (1 แถว)</p>
+      <code class="rank-code">torch.tensor([1,2,3,4])</code>
+    </div>
+    <div class="rank-card active" onclick="selectRank(2)">
+      <span class="rank-badge">2D</span>
+      <p class="rank-name">Matrix</p>
+      <p class="rank-desc">ตารางสองมิติ (แถว × คอลัมน์)</p>
+      <code class="rank-code">torch.tensor([[1,2,3],[4,5,6]])</code>
+    </div>
+    <div class="rank-card" onclick="selectRank(3)">
+      <span class="rank-badge">3D</span>
+      <p class="rank-name">3D Tensor</p>
+      <p class="rank-desc">ลูกบาศก์ตัวเลข ตารางซ้อนกัน</p>
+      <code class="rank-code">torch.randn(1, 2, 4)</code>
+    </div>
+    <div class="rank-card" onclick="selectRank(4)">
+      <span class="rank-badge">nD</span>
+      <p class="rank-name">High-Dim</p>
+      <p class="rank-desc">มิติสูง เช่น ข้อมูลภาพ / วิดีโอ</p>
+      <code class="rank-code">(B, C, H, W)</code>
+    </div>
+  </div>
+
+  <div class="detail-box">
+    <p class="detail-label">Shape</p>
+    <p class="detail-shape" id="detailShape">(2, 3)</p>
+    <p class="detail-body" id="detailBody">ตาราง 2 แถว × 3 คอลัมน์ ใช้กันทั่วไปใน Weight Matrix ของ Linear Layer ค่ะ เช่น layer ที่รับ input 3 features แล้วแปลงเป็น 2 outputs</p>
+  </div>
+
+  <p class="section-label">มิติ (B, T, C) ใน LLM อย่าง Qwen</p>
+
+  <div class="bct-card">
+    <div class="bct-vis">
+      <div class="bct-dim d-b">
+        <div class="bct-dim-label">dim 1</div>
+        <div class="bct-dim-val">B</div>
+        <div class="bct-dim-name">Batch Size</div>
+      </div>
+      <div class="bct-dim d-t">
+        <div class="bct-dim-label">dim 2</div>
+        <div class="bct-dim-val">T</div>
+        <div class="bct-dim-name">Seq Length</div>
+      </div>
+      <div class="bct-dim d-c">
+        <div class="bct-dim-label">dim 3</div>
+        <div class="bct-dim-val">C</div>
+        <div class="bct-dim-name">Hidden Size</div>
+      </div>
+    </div>
+    <div class="bct-rows">
+      <div class="bct-row">
+        <div class="bct-dot dot-b"></div>
+        <p class="bct-row-text"><strong>B (Batch Size)</strong> — ส่งกี่ประโยคเข้าไปประมวลผลพร้อมกัน เช่น B=32 คือส่ง 32 ประโยคพร้อมกันเพื่อความเร็วใน training ค่ะ</p>
+      </div>
+      <div class="bct-row">
+        <div class="bct-dot dot-t"></div>
+        <p class="bct-row-text"><strong>T (Sequence Length / Tokens)</strong> — ในประโยคนั้นมีกี่ token เช่น T=2048 คือ context window ของโมเดล</p>
+      </div>
+      <div class="bct-row">
+        <div class="bct-dot dot-c"></div>
+        <p class="bct-row-text"><strong>C (Hidden Size / Features)</strong> — เวกเตอร์ความหมายของแต่ละ token ใน Qwen2.5-7B ค่านี้คือ 3584 ค่ะ</p>
+      </div>
+    </div>
+  </div>
+
+  <p class="section-label">Common Operations ที่ใช้บ่อยสุดๆ</p>
+
+  <div class="ops-grid">
+    <div class="op-card">
+      <p class="op-name">.shape / .size()</p>
+      <p class="op-desc">เช็กมิติของ Tensor — สำคัญที่สุดตอน debug ใช้ทุก session ค่ะ</p>
+    </div>
+    <div class="op-card">
+      <p class="op-name">.to(torch.bfloat16)</p>
+      <p class="op-desc">แปลง dtype เพื่อเซฟ GPU VRAM ใช้ใน training pipeline ของ YAE-LLM</p>
+    </div>
+    <div class="op-card">
+      <p class="op-name">.pow(2)</p>
+      <p class="op-desc">ยกกำลังสองทุกตัวเลข ใช้ใน RMSNorm variance calculation</p>
+    </div>
+    <div class="op-card">
+      <p class="op-name">.mean(-1, keepdim=True)</p>
+      <p class="op-desc">หาค่าเฉลี่ยมิติสุดท้าย รักษา shape เดิมไว้สำหรับ broadcasting</p>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <span class="footer-dot"></span>
+    🕊️ สรุปโดย Yae · YAE Ecosystem · ซัพพอร์ตทุก commit ของซามะค่ะ
+    <span class="footer-dot"></span>
+  </footer>
+
+</div>
+
+<script>
+  const details = [
+    { shape: "()", body: "Scalar ไม่มีมิติเลย — ใช้เก็บค่าเดี่ยวๆ เช่น learning rate, loss value หรือ temperature parameter ค่ะ" },
+    { shape: "(4,)", body: "Vector 1 มิติ ความยาว 4 — ใช้เก็บ embedding เดี่ยวๆ หรือ bias vector ของ Linear Layer ค่ะ" },
+    { shape: "(2, 3)", body: "Matrix 2 แถว × 3 คอลัมน์ — Weight matrix ที่รับ 3 features แล้วแปลงเป็น 2 outputs, หรือ attention score matrix ค่ะ" },
+    { shape: "(1, 2, 4)", body: "3D Tensor — รูปแบบหลักใน LLM! Batch 1 × Sequence 2 tokens × Hidden 4 dims ใช้เป็น input ของ Transformer block ค่ะ" },
+    { shape: "(B, C, H, W)", body: "4D Tensor สำหรับภาพ — Batch × Channels × Height × Width ใช้ใน Vision Encoder อย่าง ViT ใน Qwen2.5-Omni ค่ะ" }
+  ];
+
+  function selectRank(i) {
+    document.querySelectorAll('.rank-card').forEach((c, idx) => c.classList.toggle('active', idx === i));
+    document.getElementById('detailShape').textContent = details[i].shape;
+    document.getElementById('detailBody').textContent = details[i].body;
+  }
+</script>
+</body>
+</html>
