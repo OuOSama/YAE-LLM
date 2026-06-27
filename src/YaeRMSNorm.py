@@ -6,9 +6,9 @@ from transformers.integrations import use_kernel_forward_from_hub
 @use_kernel_forward_from_hub("RMSNorm")
 class YaeRMSNorm(nn.Module):
     """
+    Ref: https://docs.pytorch.org/docs/2.12/generated/torch.nn.RMSNorm.html
     RMSNorm (Root Mean Square Normalization)
     สถาปัตยกรรมปรับสมดุล Tensor สำหรับโมเดลตระกูล Qwen3 (เทียบเท่ากับ T5LayerNorm)
-    Ref: https://docs.pytorch.org/docs/2.12/generated/torch.nn.RMSNorm.html
 
     ---
     🧐 RMSNorm คืออะไร? (และต่างจาก LayerNorm ยังไง)
