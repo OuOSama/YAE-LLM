@@ -1,6 +1,6 @@
-# Project YAE — LLM Core Architecture
+# YAE-LLM Core Architecture
 
-A high-performance LLM core, reverse-engineered from the **Qwen 3** (Alibaba Cloud). Built to study production-grade neural networks, low-level matrix operations, and GPU efficiency.
+**Qwen 3** LLM core reverse-engineered for low-level matrix and GPU efficiency. 🚀
 ---
 
 ## 🚀 System Specs & Performance
@@ -9,7 +9,7 @@ The core architecture is optimized, benchmarked, and compiled on the following *
 
 | Component | Specification |
 | :--- | :--- |
-| **CPU** | AMD Ryzen 7 (Mobile) — 8 Cores / 16 Threads |
+| **CPU** | AMD Ryzen 7 |
 | **GPU** | NVIDIA® GeForce RTX™ 4060 Laptop GPU (8GB VRAM) |
 | **RAM** | 24 GB DDR5 (Dual-Channel) |
 
