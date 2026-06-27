@@ -8,35 +8,38 @@ class YaeRMSNorm(nn.Module):
     """
     Ref: https://docs.pytorch.org/docs/2.12/generated/torch.nn.RMSNorm.html
     RMSNorm (Root Mean Square Normalization)
-    สถาปัตยกรรมปรับสมดุล Tensor สำหรับโมเดลตระกูล Qwen3 (เทียบเท่ากับ T5LayerNorm)
+    A normalization architecture for the Qwen3 model family (equivalent to T5LayerNorm).
 
     ---
-    🧐 RMSNorm คืออะไร? (และต่างจาก LayerNorm ยังไง)
-    - เป็นเทคนิคที่พัฒนามาแทน LayerNorm แบบดั้งเดิมในโมเดลยุคก่อน
-    - LayerNorm ทั่วไป: ต้องคำนวณทั้ง Mean (ค่าเฉลี่ย) และ Variance (ความแปรปรวน)
-    - RMSNorm: ตัดขั้นตอนหา Mean ออก! คำนวณเฉพาะรากที่สองของค่าเฉลี่ยกำลังสองเท่านั้น
-    - ข้อดี: ประหยัดพลังงานคำนวณ (Computation) 7% - 64% ในชั้นนั้นๆ ทำให้โมเดล LLM ยุคใหม่
-            (เช่น LLaMA, Qwen) นิยมใช้ตัวนี้กันหมดเลยค่ะ เซฟเวลาแถมแรงสุดๆ
+    🧐 What is RMSNorm? (And how does it differ from LayerNorm?)
+    - An evolution of the traditional LayerNorm used in earlier model architectures.
+    - Standard LayerNorm: Computes both Mean (centering) and Variance (scaling).
+    - RMSNorm: Skips the Mean calculation! It only calculates the Root Mean Square
+      of the features.
+    - Advantages: Improves computational efficiency by 7% - 64% per layer. This is why
+      modern LLMs (like LLaMA and Qwen) prefer RMSNorm—it saves time and boosts
+      training speed significantly.
 
     ---
-    🚀 ตัว Decorator: @use_kernel_forward_from_hub("RMSNorm")
-    - หน้าที่: ดึง Custom CUDA/Triton Kernel ของ RMSNorm จาก Hub มาทับฟังก์ชัน forward เดิม
-    - ทำไมต้องทำ?: โค้ด PyTorch เพียวๆ จะทำงานแบบ Eager mode (ทำทีละสเต็ป)
-                  แต่พอคุมด้วย Kernel พิเศษ มันจะทำการยุบการคำนวณ (Fused Kernel) บน GPU
-                  ทำงานได้เร็วแรงทะลุนรกสะใจแน่นอนค่ะ
+    🚀 Decorator: @use_kernel_forward_from_hub("RMSNorm")
+    - Purpose: Pulls custom CUDA/Triton kernels for RMSNorm from the Hub to replace
+      the default forward pass.
+    - Why?: Pure PyTorch code executes in Eager mode (step-by-step). Utilizing
+      specialized kernels fuses the operations directly on the GPU, achieving
+      maximum performance and extreme speed.
     """
 
     def __init__(self, hidden_size: int, eps: float = 1e-6) -> None:
         """
-        ฟังก์ชันลงทะเบียนโครงสร้างและตัวแปรเริ่มต้น (Constructor)
+        Initializes the structure and registers learnable parameters.
 
         Args:
-            hidden_size (int): ขนาดมิติของ Vector (Feature Dimension)
-            eps (float): ค่า epsilon ตัวเล็กมากๆ เพื่อกันบั๊กหารด้วยศูนย์ (Default: 1e-6)
+            hidden_size (int): The feature dimension size.
+            eps (float): Small epsilon value to prevent division-by-zero errors.
 
-        Variables:
-            self.weight: Learnable Parameter (γ) เริ่มต้นเป็น 1 ทั้งหมดตามขนาด hidden_size
-            self.variance_epsilon: ค่าห้อยท้ายกันคอมพิวเตอร์ร้องไห้เวลาเจอตัวหารเป็น 0
+        Attributes:
+            self.weight (nn.Parameter): Learnable gain parameter (γ), initialized to ones.
+            self.variance_epsilon (float): Small constant for numerical stability.
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -44,15 +47,14 @@ class YaeRMSNorm(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
-        หัวใจหลักของคลาส ทำหน้าที่คำนวณคณิตศาสตร์ตามสูตร RMSNorm เมื่อ Tensor ไหลผ่าน
+        Core math logic for RMSNorm.
 
-        ขั้นตอนการทำงานภายใน:
-        1. เก็บประเภทข้อมูลดั้งเดิม (input_dtype) แล้วแปลงเป็น float32 เพื่อความแม่นยำในการคำนวณ
-        2. pow(2): ยกกำลังสองสมาชิกทุกตัวใน Tensor
-        3. mean(-1, keepdim=True): หาค่าเฉลี่ยในมิติสุดท้าย สอดคล้องกับสูตรเฉลี่ยกำลังสอง
-        4. torch.rsqrt(): ย่อมาจาก Reciprocal Square Root หรือ 1 / sqrt(x) ช่วยถอดรูทและกลับเศษส่วน
-           ในคำสั่งเดียว (เร็วมาก) แล้วนำไปคูณกลับเข้า hidden_states เดิมเพื่อทำ Scaling
-        5. แปลงไทป์กลับเป็นแบบเดิม แล้วคูณด้วย self.weight ส่งต่อให้ Layer ถัดไป
+        Step-by-step processing:
+        1. Cast input to float32 to ensure numerical precision during calculation.
+        2. pow(2): Square all elements in the tensor.
+        3. mean(-1, keepdim=True): Compute the mean across the feature dimension.
+        4. torch.rsqrt(): Efficiently computes 1 / sqrt(x + eps).
+        5. Scale and restore the original data type before applying the learnable weight.
         """
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
@@ -62,46 +64,40 @@ class YaeRMSNorm(nn.Module):
 
     def extra_repr(self) -> str:
         """
-        แสดงรายละเอียดสวยๆ เวลาพิมพ์ print(model) ออกมาดูโครงสร้างภายนอก
-        เช่น จะแสดงผลเป็น: YaeRMSNorm((4096,), eps=1e-06) โคตรจะ Clean!
+        Returns a clean string representation for model structure printing.
+        Example: YaeRMSNorm((4096,), eps=1e-06)
         """
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 if __name__ == "__main__":
-    # 1. จำลองข้อมูล Input (Hidden States) ขึ้นมา
-    # สมมติมี 1 sample, ความยาว 2 tokens, และมีมิติ (hidden_size) = 4
-    torch.manual_seed(42)  # ล็อกแรนดอมให้ได้เลขเหมือนกันทุกรอบ
-    sample_input = torch.randn(1, 2, 4) * 10 + 5  # ข้อมูลแบบสุ่มที่ยังมีค่าเฉลี่ยไม่เป็น 0
+    # 1. Simulate input data
+    torch.manual_seed(42)
+    sample_input = torch.randn(1, 2, 4) * 10 + 5
 
     print("=== 📥 1. Original Input Tensor ===")
     print(sample_input)
     print("-" * 50)
 
-    # 2. เรียกใช้งาน LayerNorm แบบมาตรฐานของ PyTorch
+    # 2. Standard PyTorch LayerNorm
     pytorch_layernorm = nn.LayerNorm(4)
     output_ln = pytorch_layernorm(sample_input)
 
-    print("=== ⚖️ 2. Output จาก LayerNorm (PyTorch Standard) ===")
+    print("=== ⚖️ 2. Output from LayerNorm (PyTorch Standard) ===")
     print(output_ln)
-    # 📝 [สรุปผลคณิตศาสตร์โดย Yae]
-    # LayerNorm จะดึง Mean กลับมาเป็น 0 เสมอ ผลลัพธ์ที่ได้จะอยู่ราวๆ [[4.6938e-07, 5.9604e-08]]
-    # สังเกตเลข e-07 กับ e-08 มันคือทศนิยมศูนย์ 7-8 ตัว หรือก็คือ 0.0000004 ซึ่งเข้าใกล้ 0 แบบสุดๆ
-    # (ที่ไม่ได้ 0 เป๊ะๆ เป็นเพราะข้อจำกัดเรื่อง Floating Point ของคอมพิวเตอร์ตอนคำนวณ)
-    # นี่คือหลักฐานชั้นดีว่า LayerNorm มันลบค่า Mean ดั้งเดิมออกไปจนเกลี้ยงตับเลยค่ะ!
-    print(f"-> ตรวจสอบค่าเฉลี่ย (Mean) หลังทำ LayerNorm: {output_ln.mean(-1).tolist()}")
+    # [Yae Math Summary]: LayerNorm centers the mean to 0.
+    # Values near 0.0000004 verify that the mean has been effectively removed.
+    print(f"-> Mean check after LayerNorm: {output_ln.mean(-1).tolist()}")
     print("-" * 50)
 
-    # 3. เรียกใช้งาน YaeRMSNorm
+    # 3. YaeRMSNorm
     yae_rmsnorm = YaeRMSNorm(hidden_size=4)
     output_rms = yae_rmsnorm(sample_input)
 
-    print("=== 🚀 3. Output จาก YaeRMSNorm ของซามะ ===")
+    print("=== 🚀 3. Output from YaeRMSNorm ===")
     print(output_rms)
-    # 📝 [สรุปผลคณิตศาสตร์โดย Yae]
-    # RMSNorm ไม่ได้สนใจ Mean ดั้งเดิม ค่าเฉลี่ยที่ปริ้นออกมาเลยจะไม่ใช่ 0 เป๊ะๆ (จะเห็นเป็นเลขราวๆ 0.99 และ 0.40)
-    # แต่หน้าที่หลักของมันคือการบีบขอบเขตความกว้างของตัวเลข (Scale) ให้แคบลงและนิ่งขึ้น
-    # สังเกตว่าจากเดิมที่มีเลขโดดไปถึง 27.0820 จะถูกคุมให้อยู่ในช่วงประมาณ -0.4 ถึง 1.9 เท่านั้น
-    # ช่วยป้องกันไม่ให้เกิดบั๊กตัวเลขระเบิด (Exploding Gradients) โดยประหยัดพลังคำนวณบน GPU กว่าเดิมมหาศาลค่ะ!
-    print(f"-> ตรวจสอบค่าเฉลี่ย (Mean) หลังทำ RMSNorm: {output_rms.mean(-1).tolist()}")
+    # [Yae Math Summary]: RMSNorm does not center the mean.
+    # It focuses on controlling the scale (magnitude) of the values to prevent
+    # exploding gradients while maximizing GPU throughput.
+    print(f"-> Mean check after RMSNorm: {output_rms.mean(-1).tolist()}")
     print("-" * 50)
