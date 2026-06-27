@@ -158,7 +158,7 @@ def rotate_half(x: torch.Tensor) -> torch.Tensor:
     return torch.cat((-x2, x1), dim=-1)
 
 
-def eager_attention_forward(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     Expands the Key/Value heads to match the Query head count.
 
