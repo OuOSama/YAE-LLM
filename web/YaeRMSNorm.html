@@ -1,164 +1,695 @@
 <!DOCTYPE html>
 <html lang="th">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YaeRMSNorm & Tensor Summary</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YaeRMSNorm — Technical Deep-Dive</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@300;400;500;600&display=swap"
+        rel="stylesheet" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bg: '#080c10',
+                        surface: '#0d1117',
+                        card: '#111820',
+                        border: '#1e2937',
+                        border2: '#253040',
+                        text: '#cdd9e5',
+                        muted: '#768390',
+                        dim: '#3d4f60',
+                        accent: '#4fc3f7',
+                        accent2: '#81d4fa',
+                        purple: '#c792ea',
+                        green: '#5cdb95',
+                        amber: '#ffc857',
+                        coral: '#ff6b6b',
+                        pink: '#f48fb1',
+                        teal: '#26c6da',
+                        code: '#060a0e',
+                    },
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'monospace'],
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                },
+            },
+        };
+    </script>
     <style>
-        body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
+        /* custom styles for complex components not easily handled by Tailwind */
+        .formula-block {
+            background: #060a0e;
+            border: 1px solid #1e2937;
+            border-left: 3px solid #f48fb1;
+            border-radius: 8px;
+            padding: 1.2rem 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            color: #79c0ff;
+            text-align: center;
+            letter-spacing: .02em;
         }
-        code, pre {
-            font-family: 'Fira Code', monospace;
+
+        .callout {
+            background: #060a0e;
+            border-left: 3px solid #f48fb1;
+            padding: 1rem 1.2rem;
+            border-radius: 0 8px 8px 0;
+            font-size: 14px;
+            color: #768390;
+        }
+
+        .callout-green {
+            border-color: #5cdb95;
+        }
+
+        .callout-purple {
+            border-color: #c792ea;
+        }
+
+        .callout-amber {
+            border-color: #ffc857;
+        }
+
+        .cmp-card {
+            background: #060a0e;
+            border: 1px solid #1e2937;
+            border-radius: 10px;
+            padding: 1.2rem 1.4rem;
+        }
+
+        .cmp-card.amber-border {
+            border-color: #3a2e10;
+        }
+
+        .cmp-card.pink-border {
+            border-color: #3a1a2a;
+        }
+
+        .code-block {
+            background: #060a0e;
+            border: 1px solid #1e2937;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .code-header {
+            background: #0d1520;
+            padding: .5rem 1.2rem;
+            border-bottom: 1px solid #1e2937;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .code-filename {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #768390;
+        }
+
+        .code-badge {
+            font-size: 10px;
+            font-weight: 600;
+            color: #c792ea;
+            letter-spacing: .04em;
+        }
+
+        pre {
+            padding: 1.4rem 1.6rem;
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            color: #cdd9e5;
+        }
+
+        .kw {
+            color: #c792ea;
+        }
+
+        .fn {
+            color: #82aaff;
+        }
+
+        .str {
+            color: #c3e88d;
+        }
+
+        .num {
+            color: #f78c6c;
+        }
+
+        .dec {
+            color: #f48fb1;
+        }
+
+        .cmt {
+            color: #3d4f60;
+            font-style: italic;
+        }
+
+        .cls {
+            color: #ffd580;
+        }
+
+        .dim-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: .9rem 1rem;
+            border-bottom: 1px solid #1e2937;
+        }
+
+        .dim-row:last-child {
+            border-bottom: none;
+        }
+
+        .dim-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 6px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .dim-0 {
+            background: #1a0a14;
+            color: #f48fb1;
+            border: 1px solid #3a1a2a;
+        }
+
+        .dim-1 {
+            background: #140a1e;
+            color: #c792ea;
+            border: 1px solid #2a1a3a;
+        }
+
+        .dim-2 {
+            background: #0a1e14;
+            color: #5cdb95;
+            border: 1px solid #1a3a28;
+        }
+
+        .dim-title {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: #e6edf3;
+            margin-bottom: 2px;
+        }
+
+        .dim-body {
+            font-size: 13px;
+            color: #768390;
+            line-height: 1.6;
+        }
+
+        .out-card {
+            background: #060a0e;
+            border: 1px solid #1e2937;
+            border-radius: 10px;
+            padding: 1.2rem 1.4rem;
+        }
+
+        .out-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #1e2937;
+            padding-bottom: .7rem;
+            margin-bottom: .8rem;
+        }
+
+        .out-target {
+            font-size: 10px;
+            color: #3d4f60;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .out-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: #cdd9e5;
+            background: #0d1520;
+            padding: .6rem 1rem;
+            border-radius: 6px;
+            border: 1px solid #1e2937;
+            margin-bottom: .8rem;
+        }
+
+        .out-body {
+            font-size: 13px;
+            color: #768390;
+            line-height: 1.7;
+        }
+
+        .kv-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: #81d4fa;
+            background: #060a0e;
+            padding: 4px 8px;
+            border-radius: 5px;
+            border: 1px solid #1e2937;
+        }
+
+        .step-list {
+            counter-reset: step;
+            list-style: none;
+        }
+
+        .step-list li {
+            counter-increment: step;
+            display: flex;
+            gap: 14px;
+            padding: .8rem 0;
+            border-bottom: 1px solid #1e2937;
+            font-size: 14px;
+            color: #768390;
+        }
+
+        .step-list li:last-child {
+            border-bottom: none;
+        }
+
+        .step-list li::before {
+            content: counter(step);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            min-width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #1a0a14;
+            color: #f48fb1;
+            border: 1px solid #3a1a2a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: .85em;
+            color: #ff7b72;
+            background: #060a0e;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid #1e2937;
+        }
+
+        .tag {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 3px 10px;
+            border-radius: 20px;
+            border: 1px solid;
+        }
+
+        .tag-pink {
+            color: #f48fb1;
+            border-color: #3a1a2a;
+            background: #1a0a14;
+        }
+
+        .tag-purple {
+            color: #c792ea;
+            border-color: #2a1a3a;
+            background: #140a1e;
+        }
+
+        .tag-green {
+            color: #5cdb95;
+            border-color: #1a3a28;
+            background: #0a1e14;
+        }
+
+        .tag-amber {
+            color: #ffc857;
+            border-color: #3a2e10;
+            background: #1a1608;
+        }
+
+        @media (max-width: 600px) {
+            .grid2 {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen selection:bg-pink-500 selection:text-white">
 
-    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-50">
-        <div class="max-w-5xl mx-auto px-6 py-4 flex justify-between items-center">
-            <div class="flex items-center space-x-3">
-                <span class="text-2xl">🧠</span>
-                <h1 class="text-xl font-bold bg-gradient-to-r from-pink-400 to-violet-400 bg-clip-text text-transparent">YaeRMSNorm Documentation</h1>
+<body class="bg-bg text-text font-inter text-[15px] leading-relaxed">
+
+    <div class="max-w-[860px] mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
+
+        <!-- ── HERO ── -->
+        <div class="border-b border-border pb-10 mb-12">
+            <div class="text-[11px] font-semibold tracking-[.12em] uppercase text-pink mb-2">YAE Ecosystem · LLM Core ·
+                Normalization Layer</div>
+            <h1
+                class="text-[1.6rem] sm:text-[2.2rem] font-semibold text-[#e6edf3] tracking-[-.02em] leading-tight mb-3">
+                <span class="text-pink">YaeRMSNorm</span><br />Technical Deep-Dive
+            </h1>
+            <p class="text-muted max-w-[600px] text-[15px]">สรุปครบจบในหน้าเดียว — หลักการ RMSNorm, เทียบกับ LayerNorm,
+                สูตรคณิตศาสตร์, การอ่าน tensor shape, และวิเคราะห์ output จริง</p>
+            <div class="mt-3 flex flex-wrap gap-2">
+                <span class="tag tag-pink">RMSNorm</span>
+                <span class="tag tag-purple">Qwen3 Architecture</span>
+                <span class="tag tag-green">Production-Ready</span>
+                <span class="tag tag-amber">Output Verified</span>
             </div>
-            <span class="text-xs bg-slate-800 text-slate-400 px-3 py-1 rounded-full border border-slate-700">Qwen 3 Architecture Study</span>
         </div>
-    </header>
 
-    <main class="max-w-5xl mx-auto px-6 py-10 space-y-12">
-        
-        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
-            <div class="flex items-center space-x-2">
-                <span class="text-xl text-pink-400">🧐</span>
-                <h2 class="text-2xl font-bold text-white">RMSNorm คืออะไร? (และต่างจาก LayerNorm ยังไง)</h2>
+        <!-- ── 01 WHAT IS ── -->
+        <section class="mb-12">
+            <div class="text-[10.5px] font-semibold tracking-[.1em] uppercase text-dim mb-4 flex items-center gap-2">
+                01 · RMSNorm คืออะไร
+                <span class="flex-1 h-px bg-border"></span>
             </div>
-            <p class="text-slate-400 leading-relaxed">
-                <strong class="text-slate-200">RMSNorm (Root Mean Square Normalization)</strong> เป็นเทคนิคปรับสมดุล Tensor ที่พัฒนาขึ้นมาเพื่อทดแทน LayerNorm แบบดั้งเดิมในโมเดล Transformer ยุคใหม่ ช่วยลดภาระการคำนวณและเพิ่มความเร็วอย่างมหาศาล โดยตัดส่วนการหา <span class="text-pink-400 font-semibold">Mean (ค่าเฉลี่ยดั้งเดิม)</span> ออกไป
-            </p>
-            
-            <div class="grid md:grid-cols-2 gap-4 pt-2">
-                <div class="bg-slate-950 p-5 rounded-xl border border-slate-800">
-                    <h3 class="font-semibold text-amber-400 mb-2 flex items-center gap-2">❌ LayerNorm (ดั้งเดิม)</h3>
-                    <p class="text-sm text-slate-400">ต้องคำนวณทั้ง <strong>Mean</strong> และ <strong>Variance</strong> มีการทำ Centering ทำให้ใช้พลังคำนวณและแรมบน GPU สองสเต็ป</p>
+
+            <div class="bg-card border border-border rounded-xl p-5 mb-4">
+                <div class="font-semibold text-[13.5px] text-[#e6edf3] mb-2">Normalization — ทำไมถึงจำเป็น</div>
+                <p class="text-muted text-[14px] mb-3">
+                    ระหว่างการ forward pass ตัวเลขใน hidden state อาจ "ระเบิด" ออกไปหรือ "หด" จนหายไป
+                    Normalization ทำหน้าที่บีบตัวเลขให้อยู่ในช่วงที่ gradient ไหลได้สม่ำเสมอ
+                    ซึ่งช่วยทั้ง training stability และ convergence speed
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="cmp-card amber-border">
+                        <div class="cmp-title text-amber text-[13px] font-semibold flex items-center gap-1.5 mb-2">
+                            LayerNorm (ดั้งเดิม)</div>
+                        <div class="cmp-body">คำนวณ <strong class="text-text">Mean</strong> และ <strong
+                                class="text-text">Variance</strong> แยกกันสองรอบ แล้ว Centering ด้วยการลบ mean ออกก่อน
+                            ถึงจะ scale — ใช้ memory bandwidth เยอะกว่า และมี operation chain ยาวกว่า</div>
+                    </div>
+                    <div class="cmp-card pink-border">
+                        <div class="cmp-title text-pink text-[13px] font-semibold flex items-center gap-1.5 mb-2">
+                            RMSNorm (Yae Style)</div>
+                        <div class="cmp-body">ข้าม Centering ไปเลย ใช้แค่ <strong class="text-text">Root Mean
+                                Square</strong> ของ hidden state โดยตรง ลด operation ลงครึ่งหนึ่ง ประหยัด compute <span
+                                class="text-green font-semibold">7–64%</span> ตาม paper ต้นฉบับ</div>
+                    </div>
                 </div>
-                <div class="bg-slate-950 p-5 rounded-xl border border-pink-900/50 bg-gradient-to-b from-slate-950 to-pink-950/10">
-                    <h3 class="font-semibold text-pink-400 mb-2 flex items-center gap-2">✨ RMSNorm (Yae Style)</h3>
-                    <p class="text-sm text-slate-400">ข้ามขั้นตอน Centering ไปเลย จับยกกำลังสองแล้วหา <strong>Mean of Squares</strong> ทันที <span class="text-emerald-400 font-semibold">ประหยัดพลังคำนวณลงได้ 7% - 64%</span></p>
+            </div>
+
+            <div class="callout">
+                <strong>Paper reference:</strong> Zhang &amp; Sennrich (2019) — "Root Mean Square Layer Normalization"
+                พิสูจน์ว่า Centering (การลบ mean) แทบไม่มีผลต่อ model quality แต่กิน compute ฟรีๆ
+                Qwen, LLaMA, Mistral ล้วนใช้ RMSNorm แทน LayerNorm ค่ะ
+            </div>
+        </section>
+
+        <!-- ── 02 MATH ── -->
+        <section class="mb-12">
+            <div class="text-[10.5px] font-semibold tracking-[.1em] uppercase text-dim mb-4 flex items-center gap-2">
+                02 · คณิตศาสตร์เบื้องหลัง
+                <span class="flex-1 h-px bg-border"></span>
+            </div>
+
+            <div class="bg-card border border-border rounded-xl p-5 mb-4">
+                <div class="font-semibold text-[13.5px] text-[#e6edf3] mb-2">สูตร RMSNorm</div>
+                <div class="formula-block">RMS(x) = √( (1/n) · Σ xᵢ² )</div>
+                <div class="formula-block mt-2">ȳ = (x / RMS(x) + ε) · γ</div>
+                <ul class="step-list mt-3">
+                    <li><span><strong class="text-text">ยกกำลังสอง</strong> — <code>hidden_states.pow(2)</code> แต่ละ
+                            element ใน vector</span></li>
+                    <li><span><strong class="text-text">หาค่าเฉลี่ย</strong> — <code>.mean(-1, keepdim=True)</code>
+                            เฉลี่ยตาม hidden_size dimension</span></li>
+                    <li><span><strong class="text-text">บวก epsilon</strong> — <code>+ variance_epsilon</code> ป้องกัน
+                            divide-by-zero เมื่อ variance ≈ 0</span></li>
+                    <li><span><strong class="text-text">Reciprocal sqrt</strong> — <code>torch.rsqrt(...)</code> คำนวณ
+                            1/√x ใน kernel เดียว เร็วกว่า <code>1/torch.sqrt()</code></span></li>
+                    <li><span><strong class="text-text">Scale ด้วย γ</strong> — <code>self.weight * ...</code> ซึ่งเป็น
+                            learnable parameter เริ่มต้นที่ <code>ones(hidden_size)</code></span></li>
+                </ul>
+                <div class="callout callout-purple mt-3">
+                    <strong>dtype trick:</strong> แปลง input เป็น <code>float32</code> ก่อนคำนวณ variance
+                    แล้ว cast กลับเป็น <code>input_dtype</code> ตอน return — ป้องกัน precision loss
+                    เมื่อเทรนด้วย <code>bf16</code> หรือ <code>fp16</code>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-card border border-border rounded-xl p-5">
+                    <div class="font-semibold text-[13.5px] text-[#e6edf3] mb-2">Parameters</div>
+                    <div class="flex flex-wrap gap-4 mt-2">
+                        <div class="flex-1 min-w-[140px]">
+                            <div class="text-[11px] text-muted">self.weight shape</div>
+                            <div class="kv-val">[hidden_size]</div>
+                        </div>
+                        <div class="flex-1 min-w-[140px]">
+                            <div class="text-[11px] text-muted">variance_epsilon</div>
+                            <div class="kv-val">1e-6</div>
+                        </div>
+                        <div class="flex-1 min-w-[140px]">
+                            <div class="text-[11px] text-muted">weight init</div>
+                            <div class="kv-val">ones(hidden_size)</div>
+                        </div>
+                        <div class="flex-1 min-w-[140px]">
+                            <div class="text-[11px] text-muted">trainable</div>
+                            <div class="kv-val">γ only (no β)</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-card border border-border rounded-xl p-5">
+                    <div class="font-semibold text-[13.5px] text-[#e6edf3] mb-2">vs LayerNorm</div>
+                    <div class="flex flex-wrap gap-4 mt-2">
+                        <div class="flex-1 min-w-[140px]">
+                            <div class="text-[11px] text-muted">centering</div>
+                            <div class="kv-val text-coral">ไม่มี</div>
+                        </div>
+                        <div class="flex-1 min-w-[140px]">
+                            <div class="text-[11px] text-muted">bias β</div>
+                            <div class="kv-val text-coral">ไม่มี</div>
+                        </div>
+                        <div class="flex-1 min-w-[140px]">
+                            <div class="text-[11px] text-muted">compute ops</div>
+                            <div class="kv-val text-green">น้อยกว่า ~50%</div>
+                        </div>
+                        <div class="flex-1 min-w-[140px]">
+                            <div class="text-[11px] text-muted">kernel</div>
+                            <div class="kv-val">@use_kernel_forward</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <section class="space-y-4">
-            <div class="flex items-center space-x-2">
-                <span class="text-xl text-violet-400">🛠️</span>
-                <h2 class="text-2xl font-bold text-white">Implementation Code</h2>
+        <!-- ── 03 CODE ── -->
+        <section class="mb-12">
+            <div class="text-[10.5px] font-semibold tracking-[.1em] uppercase text-dim mb-4 flex items-center gap-2">
+                03 · Implementation Code
+                <span class="flex-1 h-px bg-border"></span>
             </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-                <div class="bg-slate-800/50 px-5 py-3 border-b border-slate-800 flex justify-between items-center">
-                    <span class="text-xs text-slate-400 font-mono">YaeRMSNorm.py</span>
-                    <span class="text-xs text-violet-400 font-semibold">PyTorch + Custom Kernel</span>
-                </div>
-                <pre class="p-5 text-sm overflow-x-auto text-slate-300 leading-relaxed bg-slate-950"><code><span class="text-pink-400">@use_kernel_forward_from_hub</span>(<span class="text-emerald-400">"RMSNorm"</span>)
-<span class="text-violet-400">class</span> <span class="text-amber-300">YaeRMSNorm</span>(nn.Module):
-    <span class="text-violet-400">def</span> <span class="text-sky-400">__init__</span>(<span class="text-violet-400">self</span>, hidden_size: <span class="text-amber-400">int</span>, eps: <span class="text-amber-400">float</span> = <span class="text-amber-400">1e-6</span>) -> <span class="text-violet-400">None</span>:
-        <span class="text-violet-400">super</span>().<span class="text-sky-400">__init__</span>()
-        <span class="text-violet-400">self</span>.weight = nn.Parameter(torch.ones(hidden_size))
-        <span class="text-violet-400">self</span>.variance_epsilon = eps
 
-    <span class="text-violet-400">def</span> <span class="text-sky-400">forward</span>(<span class="text-violet-400">self</span>, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        
-        <span class="text-slate-500"># หาค่าเฉลี่ยของกำลังสองทันทีโดยไม่ลบ Mean ดั้งเดิม</span>
-        variance = hidden_states.pow(<span class="text-amber-400">2</span>).mean(-<span class="text-amber-400">1</span>, keepdim=<span class="text-violet-400">True</span>)
-        
-        <span class="text-slate-500"># ทำ Scaling รวดเดียวด้วย Reciprocal Square Root</span>
-        hidden_states = hidden_states * torch.rsqrt(variance + <span class="text-violet-400">self</span>.variance_epsilon)
-        <span class="text-violet-400">return</span> <span class="text-violet-400">self</span>.weight * hidden_states.to(input_dtype)</code></pre>
+            <div class="code-block">
+                <div class="code-header">
+                    <span class="code-filename">YaeRMSNorm.py</span>
+                    <span class="code-badge">PyTorch + Custom Kernel</span>
+                </div>
+                <pre><code><span class="dec">@use_kernel_forward_from_hub</span>(<span class="str">"RMSNorm"</span>)
+        <span class="kw">class</span> <span class="cls">YaeRMSNorm</span>(nn.Module):
+            <span class="kw">def</span> <span class="fn">__init__</span>(<span class="kw">self</span>, hidden_size: <span class="cls">int</span>, eps: <span class="cls">float</span> = <span class="num">1e-6</span>) -> <span class="kw">None</span>:
+                <span class="kw">super</span>().<span class="fn">__init__</span>()
+                <span class="kw">self</span>.weight = nn.Parameter(torch.ones(hidden_size))
+                <span class="kw">self</span>.variance_epsilon = eps
+
+            <span class="kw">def</span> <span class="fn">forward</span>(<span class="kw">self</span>, hidden_states: torch.Tensor) -> torch.Tensor:
+                input_dtype = hidden_states.dtype
+                <span class="cmt"># cast to float32 ก่อนเสมอ — ป้องกัน precision loss ตอนคำนวณ variance</span>
+                hidden_states = hidden_states.to(torch.float32)
+
+                <span class="cmt"># หาค่าเฉลี่ยของกำลังสอง (ข้ามขั้น mean centering ของ LayerNorm)</span>
+                variance = hidden_states.pow(<span class="num">2</span>).mean(<span class="num">-1</span>, keepdim=<span class="kw">True</span>)
+
+                <span class="cmt"># rsqrt = 1/√(variance + ε)  ใน single fused kernel — เร็วกว่า 1/sqrt แยก</span>
+                hidden_states = hidden_states * torch.rsqrt(variance + <span class="kw">self</span>.variance_epsilon)
+
+                <span class="cmt"># คูณ learnable scale γ และ cast กลับเป็น original dtype</span>
+                <span class="kw">return</span> <span class="kw">self</span>.weight * hidden_states.to(input_dtype)</code></pre>
             </div>
-        </section>
 
-        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
-            <div class="flex items-center space-x-2">
-                <span class="text-xl text-emerald-400">📊</span>
-                <h2 class="text-2xl font-bold text-white">ถอดรหัสมิติ Tensor ยอดฮิตใน LLM</h2>
-            </div>
-            <p class="text-slate-400">
-                เมื่อจำลองรูปทรงข้อมูลด้วยสูตร <code class="text-pink-400 bg-slate-950 px-1.5 py-0.5 rounded text-xs">torch.randn(1, 2, 4)</code> ผลลัพธ์ที่ได้คือวงเล็บที่ซ้อนกัน 3 ชั้นตามแกน <strong class="text-slate-200">(Batch Size, Sequence Length, Hidden Size)</strong> ดังนี้:
-            </p>
-
-            <div class="space-y-4">
-                <div class="flex items-start space-x-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                    <div class="text-xs bg-pink-500/10 text-pink-400 font-mono p-2 rounded border border-pink-500/20">Dim 0</div>
-                    <div>
-                        <h4 class="font-semibold text-white text-sm">Batch Size (1)</h4>
-                        <p class="text-xs text-slate-400">จำนวนชุดข้อมูลหรือประโยคที่ส่งเข้าไปรันพร้อมกันใน 1 รอบการประมวลผล</p>
-                    </div>
-                </div>
-                <div class="flex items-start space-x-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                    <div class="text-xs bg-violet-500/10 text-violet-400 font-mono p-2 rounded border border-violet-500/20">Dim 1</div>
-                    <div>
-                        <h4 class="font-semibold text-white text-sm">Sequence Length / Tokens (2)</h4>
-                        <p class="text-xs text-slate-400">จำนวนคำในประโยคนั้นๆ (ในตัวอย่างมี 2 คำ เลยแบ่งออกเป็น 2 แถวบน-ล่าง)</p>
-                    </div>
-                </div>
-                <div class="flex items-start space-x-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                    <div class="text-xs bg-emerald-500/10 text-emerald-400 font-mono p-2 rounded border border-emerald-500/20">Dim 2</div>
-                    <div>
-                        <h4 class="font-semibold text-white text-sm">Hidden Size / Features (4)</h4>
-                        <p class="text-xs text-slate-400">เวกเตอร์ตัวเลข 4 ตัวที่เป็นตัวแทนความหมายหรือฟีเจอร์ภายในระบบ AI ของคำนั้นๆ</p>
-                    </div>
-                </div>
+            <div class="callout callout-green mt-3">
+                <strong>@use_kernel_forward_from_hub("RMSNorm")</strong> — decorator นี้ replace <code>forward()</code>
+                ด้วย fused CUDA kernel จาก HuggingFace Hub ตอน runtime ถ้า environment รองรับ
+                fallback กลับมา PyTorch native ถ้าไม่มี GPU kernel ค่ะ
             </div>
         </section>
 
-        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
-            <div class="flex items-center space-x-2">
-                <span class="text-xl text-sky-400">🧪</span>
-                <h2 class="text-2xl font-bold text-white">วิเคราะห์ผลลัพธ์จริงทางคณิตศาสตร์ (Output Analysis)</h2>
+        <!-- ── 04 TENSOR ── -->
+        <section class="mb-12">
+            <div class="text-[10.5px] font-semibold tracking-[.1em] uppercase text-dim mb-4 flex items-center gap-2">
+                04 · ถอดรหัส Tensor Shape ใน LLM
+                <span class="flex-1 h-px bg-border"></span>
             </div>
-            <p class="text-slate-400 text-sm">
-                จากผลการทดสอบรันด้วย <code class="text-violet-400 bg-slate-950 px-1.5 py-0.5 rounded text-xs">uv run</code> เปรียบเทียบระหว่างสองระบบ สามารถสรุปพฤติกรรมของตัวเลขได้ดังนี้:
-            </p>
 
-            <div class="grid md:grid-cols-2 gap-6 font-mono text-xs">
-                <div class="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-3">
-                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-                        <span class="font-semibold text-amber-400">⚖️ LayerNorm Mean Output</span>
-                        <span class="text-[10px] text-slate-500">Target: 0.0</span>
-                    </div>
-                    <div class="text-slate-300 bg-slate-900/50 p-2.5 rounded border border-slate-800/60 overflow-x-auto">
-                        [[4.6938e-07, 5.9604e-08]]
-                    </div>
-                    <p class="text-slate-400 font-sans leading-relaxed text-xs pt-1">
-                        ตัวเลขระบบวิทยาศาสตร์ <code class="text-slate-300">e-07</code> และ <code class="text-slate-300">e-08</code> คือทศนิยมที่มีศูนย์นำหน้า 7-8 ตัว (<code class="text-slate-300">0.0000004</code>) ซึ่งทางคอมพิวเตอร์ถือว่า <span class="text-emerald-400 font-semibold">เข้าใกล้ 0 แบบสุดๆ</span> พิสูจน์ว่าถูกหักลบค่าเฉลียดั้งเดิมออกไปทั้งหมดจริง
-                    </p>
+            <div class="bg-card border border-border rounded-xl p-5">
+                <div class="font-semibold text-[13.5px] text-[#e6edf3] mb-2">
+                    <code class="text-pink">torch.randn(B, T, C)</code>
+                    <span class="text-muted font-normal text-[13px] ml-2">— รูปแบบมาตรฐาน hidden state</span>
                 </div>
-
-                <div class="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-3">
-                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-                        <span class="font-semibold text-pink-400">🚀 YaeRMSNorm Mean Output</span>
-                        <span class="text-[10px] text-slate-500">Target: Scaled</span>
+                <p class="text-muted text-[14px] my-3">
+                    ทุก tensor ที่ไหลผ่าน Transformer block จะมี shape 3 มิตินี้เสมอ
+                    <code>torch.randn(1, 2, 4)</code> อ่านได้ทันทีว่า: batch 1, ประโยค 2 token, แต่ละ token มี feature 4
+                    ตัว
+                </p>
+                <div class="bg-code border border-border rounded-lg overflow-hidden">
+                    <div class="dim-row">
+                        <div class="dim-badge dim-0">Dim 0 · B</div>
+                        <div>
+                            <div class="dim-title">Batch Size</div>
+                            <div class="dim-body">จำนวนประโยค/ชุดข้อมูลที่รันพร้อมกันใน 1 forward pass — ยิ่งมาก GPU
+                                ยิ่งทำงานขนานได้เต็มที่ (แต่กิน VRAM เพิ่ม)</div>
+                        </div>
                     </div>
-                    <div class="text-slate-300 bg-slate-900/50 p-2.5 rounded border border-slate-800/60 overflow-x-auto">
-                        [[0.9950, 0.4037]]
+                    <div class="dim-row">
+                        <div class="dim-badge dim-1">Dim 1 · T</div>
+                        <div>
+                            <div class="dim-title">Sequence Length / Tokens</div>
+                            <div class="dim-body">จำนวน token ในประโยค — ตัว Attention ต้องคิด relationship ทุกคู่ O(T²)
+                                นี่คือเหตุที่ long context ถึงหนักมาก</div>
+                        </div>
                     </div>
-                    <p class="text-slate-400 font-sans leading-relaxed text-xs pt-1">
-                        ค่าเฉลี่ยไม่ได้ถูกบังคับให้เป็น 0 แต่ขอบเขตความกว้างของตัวเลข (Scale) ดั้งเดิมที่เหวี่ยงตั้งแต่ติดลบไปจนถึง <code class="text-slate-300">27.0820</code> ได้ถูก <span class="text-pink-400 font-semibold">บีบให้อยู่ในช่วงแคบและนิ่งขึ้น (-0.4 ถึง 1.9)</span> ช่วยกันบั๊กตัวเลขระเบิดขณะเทรนโดยประหยัดพลังงาน GPU กว่าเดิมมหาศาล
-                    </p>
+                    <div class="dim-row">
+                        <div class="dim-badge dim-2">Dim 2 · C</div>
+                        <div>
+                            <div class="dim-title">Hidden Size / Features</div>
+                            <div class="dim-body">เวกเตอร์ความหมาย — เรียกว่า <code>hidden_size</code> หรือ
+                                <code>d_model</code> คือ "ขนาดสมอง" ของโมเดล ยิ่งกว้างยิ่งจำได้มาก</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="callout callout-amber mt-3">
+                    <strong>RMSNorm normalize ตาม Dim 2 (C)</strong> — <code>.mean(-1)</code> คือหาค่าเฉลี่ยตาม last
+                    dimension
+                    นั่นคือ normalize แต่ละ token แยกกัน ไม่ข้าม batch หรือ sequence ค่ะ
                 </div>
             </div>
         </section>
 
-    </main>
+        <!-- ── 05 OUTPUT ── -->
+        <section class="mb-12">
+            <div class="text-[10.5px] font-semibold tracking-[.1em] uppercase text-dim mb-4 flex items-center gap-2">
+                05 · วิเคราะห์ Output จริงจากการ Run
+                <span class="flex-1 h-px bg-border"></span>
+            </div>
 
-    <footer class="text-center text-xs text-slate-600 py-8 border-t border-slate-900">
-        🕊️ สรุปโดย Yae — ซัพพอร์ตทุกการเรียนรู้ของซามะสู่วิถี Gigachad Developer ค่ะ
-    </footer>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="out-card">
+                    <div class="out-header">
+                        <span class="out-title text-amber">LayerNorm — Mean output</span>
+                        <span class="out-target">target ≈ 0.0</span>
+                    </div>
+                    <div class="out-value">[[4.6938e-07, 5.9604e-08]]</div>
+                    <div class="out-body">
+                        <code>e-07</code> คือ <code>0.00000046938</code> — ทางคณิตศาสตร์ถือว่า
+                        <span class="text-green font-semibold">เข้าใกล้ 0 แบบสุดๆ</span>
+                        พิสูจน์ว่า LayerNorm ทำ centering สำเร็จ — mean ถูกลบออกหมดจริง
+                        แต่ต้องใช้ compute 2 รอบ (mean + variance)
+                    </div>
+                </div>
+                <div class="out-card">
+                    <div class="out-header">
+                        <span class="out-title text-pink">YaeRMSNorm — Mean output</span>
+                        <span class="out-target">target: scaled only</span>
+                    </div>
+                    <div class="out-value">[[0.9950, 0.4037]]</div>
+                    <div class="out-body">
+                        Mean ไม่ถูกบังคับเป็น 0 — แต่ขอบเขตตัวเลขที่เคย span จาก
+                        <code>−x</code> ถึง <code>27.08</code> ถูก
+                        <span class="text-pink font-semibold">บีบให้อยู่ช่วงแคบและนิ่ง</span>
+                        ป้องกัน gradient explosion ได้เท่ากัน ด้วย operation น้อยกว่า
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-card border border-border rounded-xl p-5 mt-4">
+                <div class="font-semibold text-[13.5px] text-[#e6edf3] mb-2">สรุป: ทำไม RMSNorm ถึงชนะ</div>
+                <table class="w-full border-collapse text-[13px] mt-2">
+                    <thead>
+                        <tr>
+                            <th
+                                class="text-left text-muted font-medium text-[11px] tracking-[.06em] uppercase py-1.5 px-2.5 border-b border-border">
+                                Property</th>
+                            <th
+                                class="text-center text-amber text-[11px] uppercase py-1.5 px-2.5 border-b border-border">
+                                LayerNorm</th>
+                            <th
+                                class="text-center text-pink text-[11px] uppercase py-1.5 px-2.5 border-b border-border">
+                                RMSNorm</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="py-2 px-2.5 border-b border-border text-muted">Mean centering</td>
+                            <td class="text-center py-2 px-2.5 border-b border-border text-green">✓</td>
+                            <td class="text-center py-2 px-2.5 border-b border-border text-coral">✗ (ตัดออก)</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-2.5 border-b border-border text-muted">Bias parameter β</td>
+                            <td class="text-center py-2 px-2.5 border-b border-border text-green">✓</td>
+                            <td class="text-center py-2 px-2.5 border-b border-border text-coral">✗ (ตัดออก)</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-2.5 border-b border-border text-muted">Scale parameter γ</td>
+                            <td class="text-center py-2 px-2.5 border-b border-border text-green">✓</td>
+                            <td class="text-center py-2 px-2.5 border-b border-border text-green">✓</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-2.5 border-b border-border text-muted">Compute efficiency</td>
+                            <td class="text-center py-2 px-2.5 border-b border-border text-muted">baseline</td>
+                            <td class="text-center py-2 px-2.5 border-b border-border text-green">+7–64% faster</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-2.5 text-muted">ใช้ใน modern LLM</td>
+                            <td class="text-center py-2 px-2.5 text-muted">เก่า (GPT-2 era)</td>
+                            <td class="text-center py-2 px-2.5 text-green">Qwen, LLaMA, Mistral</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ── 06 SUMMARY ── -->
+        <section class="mb-12">
+            <div class="text-[10.5px] font-semibold tracking-[.1em] uppercase text-dim mb-4 flex items-center gap-2">
+                06 · สรุปรวม — YaeRMSNorm Production Checklist
+                <span class="flex-1 h-px bg-border"></span>
+            </div>
+
+            <div class="callout callout-green text-[14px] leading-relaxed">
+                <strong class="text-green">✓ Mathematically correct</strong> — สูตร RMS ตรงกับ paper ต้นฉบับและ Qwen3
+                implementation<br />
+                <strong class="text-green">✓ dtype safe</strong> — cast เป็น float32 ก่อน normalize, cast กลับตอน return
+                ป้องกัน bf16 overflow<br />
+                <strong class="text-green">✓ Numerically stable</strong> — variance_epsilon ป้องกัน div-by-zero ทุก edge
+                case<br />
+                <strong class="text-green">✓ Kernel-optimized</strong> — <code>@use_kernel_forward_from_hub</code> +
+                <code>torch.rsqrt</code> fused ops<br />
+                <strong class="text-green">✓ Minimal parameters</strong> — learnable γ เท่านั้น ไม่มี β ลด parameter
+                count โดยไม่เสีย quality<br />
+                <strong class="text-green">✓ Output verified</strong> — ทดสอบเทียบ LayerNorm แล้ว behavior ถูกต้องตาม
+                theory
+            </div>
+        </section>
+
+        <footer class="mt-16 pt-6 border-t border-border text-[12px] text-dim text-center">
+            YAE Ecosystem · YaeRMSNorm · Qwen3 Architecture Study · output verified ✓
+        </footer>
+
+    </div>
 
 </body>
+
 </html>
